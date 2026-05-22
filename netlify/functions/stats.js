@@ -55,9 +55,18 @@ exports.handler = async function () {
       configMap[row.key] = row.value;
     }
 
-    const summitEventEnabled = configMap.summit_event_enabled === "true";
+    const now = Date.now();
+
+    const rawEnabled = configMap.summit_event_enabled === "true";
+    const summitEventEndsAt = Number(configMap.summit_event_ends_at || 0);
+    const eventStillActive =
+      rawEnabled && summitEventEndsAt > 0 && summitEventEndsAt > now;
+
     const summitMultiplier = Number(configMap.summit_multiplier || 1);
     const summitEventName = configMap.summit_event_name || "Normal Summit";
+    const remainingMs = eventStillActive
+      ? Math.max(0, summitEventEndsAt - now)
+      : 0;
 
     return {
       statusCode: 200,
@@ -66,10 +75,13 @@ exports.handler = async function () {
         players: latest.players,
         servers: latest.servers,
         created_at: latest.created_at,
+        serverTimeMs: now,
         config: {
-          summitEventEnabled,
-          summitMultiplier,
-          summitEventName,
+          summitEventEnabled: eventStillActive,
+          summitMultiplier: eventStillActive ? summitMultiplier : 1,
+          summitEventName: eventStillActive ? summitEventName : "Normal Summit",
+          summitEventEndsAt,
+          remainingMs,
         },
       }),
     };

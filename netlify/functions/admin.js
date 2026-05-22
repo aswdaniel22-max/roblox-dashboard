@@ -57,20 +57,25 @@ exports.handler = async function (event) {
       Authorization: "Bearer " + supabaseKey,
     };
 
-    if (body.action === "set_event") {
-      const enabled = body.enabled === true || String(body.enabled) === "true";
-
+    if (body.action === "start_event") {
       let multiplier = Number(body.multiplier || 1);
       if (!multiplier || multiplier < 1) multiplier = 1;
-      if (multiplier > 20) multiplier = 20;
+      if (multiplier > 100) multiplier = 100;
+
+      let durationMinutes = Number(body.durationMinutes || 10);
+      if (!durationMinutes || durationMinutes < 1) durationMinutes = 1;
+      if (durationMinutes > 10080) durationMinutes = 10080;
 
       let eventName = String(body.eventName || "Summit Boost");
       eventName = eventName.slice(0, 40);
 
+      const now = Date.now();
+      const endsAt = now + durationMinutes * 60 * 1000;
+
       await upsertConfig(supabaseUrl, headers, [
         {
           key: "summit_event_enabled",
-          value: enabled ? "true" : "false",
+          value: "true",
         },
         {
           key: "summit_multiplier",
@@ -80,18 +85,52 @@ exports.handler = async function (event) {
           key: "summit_event_name",
           value: eventName,
         },
+        {
+          key: "summit_event_ends_at",
+          value: String(endsAt),
+        },
       ]);
 
       return {
         statusCode: 200,
         body: JSON.stringify({
           ok: true,
-          message: "Summit event updated.",
+          message: "Summit event started.",
           config: {
-            summitEventEnabled: enabled,
+            summitEventEnabled: true,
             summitMultiplier: multiplier,
             summitEventName: eventName,
+            summitEventEndsAt: endsAt,
           },
+        }),
+      };
+    }
+
+    if (body.action === "stop_event") {
+      await upsertConfig(supabaseUrl, headers, [
+        {
+          key: "summit_event_enabled",
+          value: "false",
+        },
+        {
+          key: "summit_multiplier",
+          value: "1",
+        },
+        {
+          key: "summit_event_name",
+          value: "Normal Summit",
+        },
+        {
+          key: "summit_event_ends_at",
+          value: "0",
+        },
+      ]);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          ok: true,
+          message: "Summit event stopped.",
         }),
       };
     }

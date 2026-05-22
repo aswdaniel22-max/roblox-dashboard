@@ -1,20 +1,3 @@
-async function upsertConfig(supabaseUrl, headers, rows) {
-  const response = await fetch(
-    supabaseUrl + "/rest/v1/game_config?on_conflict=key",
-    {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(rows),
-    }
-  );
-
-  return response;
-}
-
 async function getConfig(supabaseUrl, headers) {
   const response = await fetch(supabaseUrl + "/rest/v1/game_config?select=*", {
     headers,
@@ -96,11 +79,19 @@ exports.handler = async function (event) {
       };
     }
 
+    const now = Date.now();
     const configMap = await getConfig(supabaseUrl, headers);
 
-    const summitEventEnabled = configMap.summit_event_enabled === "true";
+    const rawEnabled = configMap.summit_event_enabled === "true";
+    const summitEventEndsAt = Number(configMap.summit_event_ends_at || 0);
+    const eventStillActive =
+      rawEnabled && summitEventEndsAt > 0 && summitEventEndsAt > now;
+
     const summitMultiplier = Number(configMap.summit_multiplier || 1);
     const summitEventName = configMap.summit_event_name || "Normal Summit";
+    const remainingMs = eventStillActive
+      ? Math.max(0, summitEventEndsAt - now)
+      : 0;
 
     const resetAllId = configMap.reset_all_id || "";
     const resetAllReason =
@@ -130,10 +121,13 @@ exports.handler = async function (event) {
         players,
         servers,
         jobId,
+        serverTimeMs: now,
         config: {
-          summitEventEnabled,
-          summitMultiplier,
-          summitEventName,
+          summitEventEnabled: eventStillActive,
+          summitMultiplier: eventStillActive ? summitMultiplier : 1,
+          summitEventName: eventStillActive ? summitEventName : "Normal Summit",
+          summitEventEndsAt,
+          remainingMs,
         },
         command,
       }),
